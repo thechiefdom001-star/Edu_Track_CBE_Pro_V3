@@ -20,9 +20,25 @@ export const SchoolCalendar = ({ data, isAdmin }) => {
     const nextMonth = () => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
     const prevMonth = () => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
 
+    const formatDateISO = (dateInput) => {
+        if (!dateInput) return '';
+        try {
+            const date = new Date(dateInput);
+            if (isNaN(date.getTime())) return '';
+            return date.toISOString().split('T')[0];
+        } catch (e) {
+            return '';
+        }
+    };
+
     const eventsForDay = (day) => {
         const dateStr = `${year}-${String(viewDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        return calendarData.filter(e => e.start === dateStr || (e.start <= dateStr && e.end >= dateStr));
+        return calendarData.filter(event => {
+            const start = formatDateISO(event.start);
+            const end = event.end ? formatDateISO(event.end) : start;
+            if (!start) return false;
+            return dateStr >= start && dateStr <= end;
+        });
     };
 
     const handleAddEvent = async (e) => {
@@ -37,7 +53,6 @@ export const SchoolCalendar = ({ data, isAdmin }) => {
         if (result.success) {
             alert('Event added successfully!');
             setShowAddModal(false);
-            // Refresh data via window event if needed
             window.dispatchEvent(new CustomEvent('edutrack:data-refresh'));
         }
     };
@@ -46,15 +61,22 @@ export const SchoolCalendar = ({ data, isAdmin }) => {
         const days = [];
         const totalDays = daysInMonth(viewDate);
         const startOffset = firstDayOfMonth(viewDate);
-
-        // Fill previous month padding
         for (let i = 0; i < startOffset; i++) days.push(null);
-
-        // Fill current month
         for (let i = 1; i <= totalDays; i++) days.push(i);
-
         return days;
     }, [viewDate]);
+
+    const upcomingEvents = useMemo(() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return calendarData
+            .filter(e => {
+                const eventDate = new Date(e.start);
+                return eventDate >= today;
+            })
+            .sort((a, b) => new Date(a.start) - new Date(b.start))
+            .slice(0, 10);
+    }, [calendarData]);
 
     return html`
         <div class="animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -84,7 +106,7 @@ export const SchoolCalendar = ({ data, isAdmin }) => {
                 <!-- Calendar Grid -->
                 <div class="grid grid-cols-7 gap-px bg-slate-100 dark:bg-slate-800 rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-800">
                     ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => html`
-                        <div class="bg-slate-50 dark:bg-slate-900/50 py-3 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-inherit">${day}</div>
+                        <div class="bg-slate-50 dark:bg-slate-900/50 py-3 text-center text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-inherit">${day}</div>
                     `)}
                     
                     ${calendarGrid.map((day, idx) => {
@@ -92,19 +114,35 @@ export const SchoolCalendar = ({ data, isAdmin }) => {
                         const isToday = day && new Date().toDateString() === new Date(year, viewDate.getMonth(), day).toDateString();
 
                         return html`
-                            <div class=${`min-h-[120px] bg-white dark:bg-slate-900 p-2 group transition-colors ${day ? 'hover:bg-slate-50 dark:hover:bg-slate-800/50' : 'bg-slate-50/50 dark:bg-slate-950/20'}`}>
+                            <div class=${`min-h-[120px] bg-white dark:bg-slate-900 p-2 group transition-all duration-300 ${
+                                day ? (
+                                    dayEvents.length > 0 ? 
+                                    (dayEvents.some(e => e.type === 'holiday') ? 'bg-red-50/30 dark:bg-red-900/10 ring-1 ring-inset ring-red-500/10' :
+                                     dayEvents.some(e => e.type === 'exam') ? 'bg-orange-50/30 dark:bg-orange-900/10 ring-1 ring-inset ring-orange-500/10' :
+                                     'bg-indigo-50/30 dark:bg-indigo-900/10 ring-1 ring-inset ring-indigo-500/10') : 
+                                    'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                                ) : 'bg-slate-50/50 dark:bg-slate-950/20'
+                            }`}>
                                 ${day && html`
                                     <div class="flex justify-between items-start mb-2">
-                                        <span class=${`w-7 h-7 flex items-center justify-center rounded-full text-xs font-black ${isToday ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}>
+                                        <span class=${`w-7 h-7 flex items-center justify-center rounded-full text-xs font-black transition-transform group-hover:scale-110 ${isToday ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 dark:text-slate-400'}`}>
                                             ${day}
                                         </span>
+                                        <div class="flex gap-0.5">
+                                            ${dayEvents.slice(0, 3).map(e => html`
+                                                <span class=${`w-1.5 h-1.5 rounded-full ring-1 ring-white dark:ring-slate-900 ${
+                                                    e.type === 'holiday' ? 'bg-red-500' : 
+                                                    e.type === 'exam' ? 'bg-orange-500' : 'bg-indigo-600'
+                                                }`}></span>
+                                            `)}
+                                        </div>
                                     </div>
                                     <div class="space-y-1">
                                         ${dayEvents.map(event => html`
-                                            <div class=${`px-2 py-1 rounded text-[9px] font-bold truncate cursor-pointer transition-transform hover:scale-105 ${
-                                                event.type === 'holiday' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 
-                                                event.type === 'exam' ? 'bg-orange-500/10 text-orange-500 border border-orange-500/20' : 
-                                                'bg-indigo-500/10 text-indigo-500 border border-indigo-500/20'
+                                            <div class=${`px-2 py-1.5 rounded-lg text-[9px] font-black truncate shadow-sm border ${
+                                                event.type === 'holiday' ? 'bg-red-500 text-white border-red-600' : 
+                                                event.type === 'exam' ? 'bg-orange-500 text-white border-orange-600' : 
+                                                'bg-indigo-600 text-white border-indigo-700'
                                             }`} title=${event.title + ': ' + (event.details || '')}>
                                                 ${event.title}
                                             </div>
@@ -117,30 +155,57 @@ export const SchoolCalendar = ({ data, isAdmin }) => {
                 </div>
             </div>
 
-            <!-- Upcoming Events List -->
-            <section class="mt-12">
-                <h3 class="text-xl font-black text-slate-900 dark:text-white mb-6 flex items-center gap-2">
-                    <span class="bg-indigo-600 w-2 h-2 rounded-full"></span> Upcoming School Events
+            <!-- Upcoming Events Table -->
+            <section class="mt-12 mb-12">
+                <h3 class="text-2xl font-black text-indigo-600 mb-6 flex items-center gap-3">
+                    <span class="bg-indigo-600 w-3 h-3 rounded-full"></span> 
+                    Upcoming School Events
                 </h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    ${calendarData.filter(e => new Date(e.start) >= new Date()).slice(0, 4).map(event => html`
-                        <div class="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-100 dark:border-slate-800 flex gap-4 shadow-sm hover:shadow-md transition-shadow">
-                            <div class=${`w-14 h-14 rounded-2xl flex flex-col items-center justify-center text-white font-black shrink-0 ${
-                                event.type === 'holiday' ? 'bg-red-500' : event.type === 'exam' ? 'bg-orange-500' : 'bg-indigo-500'
-                            }`}>
-                                <span class="text-[10px] uppercase">${new Date(event.start).toLocaleString('default', { month: 'short' })}</span>
-                                <span class="text-xl">${new Date(event.start).getDate()}</span>
-                            </div>
-                            <div>
-                                <h4 class="font-black text-slate-900 dark:text-white">${event.title}</h4>
-                                <p class="text-xs text-slate-500 mt-1 line-clamp-2">${event.details || 'No additional details provided.'}</p>
-                                <div class="mt-2 flex items-center gap-2">
-                                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold uppercase tracking-widest">${event.type}</span>
-                                    ${event.term && html`<span class="text-[10px] text-slate-400 font-medium">${event.term}</span>`}
-                                </div>
-                            </div>
-                        </div>
-                    `)}
+                
+                <div class="bg-white dark:bg-slate-900 rounded-[2rem] overflow-hidden border border-slate-100 dark:border-slate-800 shadow-xl">
+                    <div class="overflow-x-auto no-scrollbar">
+                        <table class="w-full border-collapse text-left">
+                            <thead>
+                                <tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
+                                    <th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Date</th>
+                                    <th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Event Title</th>
+                                    <th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Type</th>
+                                    <th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Details</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                                ${upcomingEvents.length === 0 ? html`
+                                    <tr>
+                                        <td colspan="4" class="px-6 py-12 text-center text-slate-400 font-medium italic">
+                                            No upcoming events scheduled at this time.
+                                        </td>
+                                    </tr>
+                                ` : upcomingEvents.map(event => html`
+                                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                                        <td class="px-6 py-4">
+                                            <div class="flex flex-col">
+                                                <span class="text-sm font-black text-slate-900 dark:text-white">${new Date(event.start).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                                                <span class="text-[10px] text-slate-400 uppercase font-bold">${new Date(event.start).getFullYear()}</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="text-sm font-bold text-indigo-600 dark:text-indigo-400">${event.title}</span>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class=${`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                                                event.type === 'holiday' ? 'bg-red-500/10 text-red-500' : 
+                                                event.type === 'exam' ? 'bg-orange-500/10 text-orange-500' : 
+                                                'bg-indigo-500/10 text-indigo-500'
+                                            }`}>${event.type}</span>
+                                        </td>
+                                        <td class="px-6 py-4 max-w-xs">
+                                            <p class="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">${event.details || '-'}</p>
+                                        </td>
+                                    </tr>
+                                `)}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </section>
 

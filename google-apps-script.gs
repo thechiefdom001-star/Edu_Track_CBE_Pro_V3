@@ -246,7 +246,9 @@ function getAllRecords(sheetName, headers, useCache = true) {
         value = 't1,t2,t3';
       }
       
-      if (value && typeof value === 'object') {
+      if (value && value instanceof Date) {
+        value = value.toISOString();
+      } else if (value && typeof value === 'object') {
         value = String(value).includes('java.lang') ? '' : JSON.stringify(value);
       }
       
@@ -259,10 +261,18 @@ function getAllRecords(sheetName, headers, useCache = true) {
       obj.studentName = String(obj.studentName || '');
     }
     
-    if (idValue && !seenIds.has(idValue)) {
+    // Ensure we have an ID for the record - generate one if manual entry is missing ID
+    if (!idValue) {
+      idValue = 'AUTO-' + sheetName.substring(0,3).toUpperCase() + '-' + rowIndex;
+      obj.id = idValue;
+    }
+    
+    if (!seenIds.has(idValue)) {
       const headerNames = ['id', 'name', 'grade', 'stream', 'admissionNo', 'parentContact', 'selectedFees', 
                           'studentId', 'studentAdmissionNo', 'studentName', 'subject', 'score', 'term',
                           'examType', 'academicYear', 'date', 'level', 'status'];
+      
+      // Safety check: skip if ID is actually a header name (case-insensitive)
       if (headerNames.indexOf(idValue.toLowerCase()) === -1) {
         seenIds.add(idValue);
         results.push(obj);
@@ -381,18 +391,47 @@ function addRecord(sheetName, record, headers, userId = null, userName = null, u
     
     console.log('[addRecord] Row values:', rowValues);
 
-    let action = 'add';
+    let action = 'ADD';
     if (rowIndex > 0) {
       sheet.getRange(rowIndex, 1, 1, headers.length).setValues([rowValues]);
-      action = 'update';
+      action = 'UPDATE';
       console.log('[addRecord] Updated row:', rowIndex);
     } else {
       sheet.appendRow(rowValues);
-      action = 'add';
+      action = 'ADD';
       console.log('[addRecord] Added new row');
     }
     
     dataCache.remove(`records_${sheetName}`);
+    
+    // ONLY log if it's a teacher or admin action
+    if (userId && userRole && (userRole === 'teacher' || userRole === 'admin')) {
+      let recordName = record.title || record.name || record.id || '';
+      
+      // Special handling for payments to include student name in activity log
+      if (sheetName === SHEET_NAMES.PAYMENTS && record.studentId) {
+        try {
+          const studentRecords = getAllRecords(SHEET_NAMES.STUDENTS, STUDENT_HEADERS, true);
+          const student = studentRecords.find(s => String(s.id) === String(record.studentId));
+          if (student) {
+            recordName = `Payment: ${student.name}`;
+          }
+        } catch (e) {
+          console.log('[addRecord] Failed to resolve student name for log');
+        }
+      }
+
+      logUserActivity({
+        userId,
+        userName: userName || userId,
+        userRole,
+        action,
+        module: sheetName,
+        recordId: record.id,
+        recordName,
+        details: `School data ${action.toLowerCase()}ed: ${sheetName} entry ${recordName}`
+      });
+    }
     
     const result = { success: true, id: record.id, message: 'Record ' + action + 'ed', action: action };
     console.log('[addRecord] Returning:', JSON.stringify(result));
@@ -2031,7 +2070,8 @@ function getHeadersForSheet(sheetName) {
     [SHEET_NAMES.ATTENDANCE]: ATTENDANCE_HEADERS,
     [SHEET_NAMES.TEACHERS]: TEACHER_HEADERS,
     [SHEET_NAMES.STAFF]: STAFF_HEADERS,
-    [SHEET_NAMES.PAYMENTS]: PAYMENT_HEADERS
+    [SHEET_NAMES.PAYMENTS]: PAYMENT_HEADERS,
+    [SHEET_NAMES.CALENDAR]: CALENDAR_HEADERS
   };
   return headersMap[sheetName] || [];
 }
@@ -2186,6 +2226,17 @@ function doGet(e) {
         payment.date = new Date().toISOString().split('T')[0];
       }
       response = addRecord(SHEET_NAMES.PAYMENTS, payment, PAYMENT_HEADERS,
+        e?.parameter?.userId, e?.parameter?.userName, e?.parameter?.userRole);
+      return createJsonResponse(response);
+    }
+
+    // Handle addCalendar via GET
+    if (action === 'addCalendar' && postData.calendar) {
+      const event = postData.calendar;
+      if (!event.id) {
+        event.id = 'EVT-' + Date.now();
+      }
+      response = addRecord(SHEET_NAMES.CALENDAR, event, CALENDAR_HEADERS,
         e?.parameter?.userId, e?.parameter?.userName, e?.parameter?.userRole);
       return createJsonResponse(response);
     }
@@ -2374,8 +2425,13 @@ function doGet(e) {
           attendance: getAllRecords(SHEET_NAMES.ATTENDANCE, ATTENDANCE_HEADERS),
           teachers: getAllRecords(SHEET_NAMES.TEACHERS, TEACHER_HEADERS),
           staff: getAllRecords(SHEET_NAMES.STAFF, STAFF_HEADERS),
-          payments: getAllRecords(SHEET_NAMES.PAYMENTS, PAYMENT_HEADERS)
+          payments: getAllRecords(SHEET_NAMES.PAYMENTS, PAYMENT_HEADERS),
+          calendar: getAllRecords(SHEET_NAMES.CALENDAR, CALENDAR_HEADERS, false)
         };
+        break;
+        
+      case 'getCalendar':
+        response = { success: true, calendar: getAllRecords(SHEET_NAMES.CALENDAR, CALENDAR_HEADERS, false) };
         break;
         
       case 'getStudents':

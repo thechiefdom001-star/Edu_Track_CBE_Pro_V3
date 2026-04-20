@@ -81,6 +81,7 @@ const dedupeActiveUsers = (users = []) => {
 export const Dashboard = ({ data, setData, googleSyncStatus, isAdmin, teacherSession }) => {
     const [activeUsers, setActiveUsers] = useState([]);
     const [lastActivity, setLastActivity] = useState(null);
+    const [recentActivities, setRecentActivities] = useState([]);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const refreshRef = useRef(false); // Prevent concurrent refreshes
     
@@ -98,7 +99,8 @@ export const Dashboard = ({ data, setData, googleSyncStatus, isAdmin, teacherSes
             attendance: result.attendance ?? null,
             payments: result.payments ?? null,
             teachers: result.teachers ?? null,
-            staff: result.staff ?? null
+            staff: result.staff ?? null,
+            calendar: result.calendar ?? null
         }));
     };
     
@@ -212,8 +214,11 @@ export const Dashboard = ({ data, setData, googleSyncStatus, isAdmin, teacherSes
                 googleSheetSync.setSettings(settings);
                 const result = await googleSheetSync.fetchAll();
                 
-                if (result.success) {
-                    applyGoogleRefresh(result);
+                
+                // Fetch recent activities from Log
+                const logResult = await googleSheetSync.getRecentActivities(10);
+                if (logResult) {
+                    setRecentActivities(logResult);
                 }
             } catch (error) {
                 console.warn('Dashboard refresh error:', error);
@@ -385,22 +390,33 @@ export const Dashboard = ({ data, setData, googleSyncStatus, isAdmin, teacherSes
                         Recent Activity
                     </h3>
                     <div class="space-y-1">
-                        ${payments.slice(-5).reverse().map((p, idx) => {
-        const student = (students || []).find(s => String(s.id) === String(p.studentId));
-        return html`
-                                <div class=${`flex justify-between items-center p-3 rounded-xl border-b border-slate-50 last:border-0 ${idx % 2 === 0 ? 'bg-slate-50/50' : ''}`}>
-                                    <div>
-                                        <p class="font-bold text-xs md:text-sm text-slate-700">${student?.name || 'Unknown Student'}</p>
-                                        <p class="text-[10px] text-slate-400">Payment Received • ${p.date}</p>
+                        ${(recentActivities || []).map((activity, idx) => html`
+                                <div class=${`flex items-center gap-3 p-3 rounded-xl border-b border-slate-50 last:border-0 ${idx % 2 === 0 ? 'bg-slate-50/50' : ''}`}>
+                                    <div class=${`w-8 h-8 rounded-lg flex items-center justify-center text-xs ${
+                                        activity.action === 'ADD' ? 'bg-green-100 text-green-600' : 
+                                        activity.action === 'DELETE' ? 'bg-red-100 text-red-600' : 
+                                        'bg-indigo-100 text-indigo-600'
+                                    }`}>
+                                        ${activity.module === 'Calendar' ? '📅' : 
+                                          activity.module === 'Payments' ? '💰' : 
+                                          activity.module === 'Students' ? '👤' : '📝'}
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="font-bold text-[11px] md:text-xs text-slate-700 truncate">
+                                            ${activity.module === 'Payments' ? (activity.recordName || '').replace('Payment: ', '') : (activity.recordName || activity.details || 'System Action')}
+                                        </p>
+                                        <p class="text-[9px] text-slate-400 capitalize">
+                                            ${activity.userName} • ${activity.action.toLowerCase()}ed • ${new Date(activity.timestamp).toLocaleDateString()}
+                                        </p>
                                     </div>
                                     <div class="text-right">
-                                        <span class="text-green-600 font-black text-xs md:text-sm">+${settings.currency} ${p.amount.toLocaleString()}</span>
-                                        <p class="text-[8px] text-slate-300 font-mono uppercase">${p.receiptNo || 'N/A'}</p>
+                                        <span class="text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                                            ${activity.module}
+                                        </span>
                                     </div>
                                 </div>
-                            `;
-    })}
-                        ${payments.length === 0 && html`<p class="text-center text-slate-300 py-4 text-sm">No recent payments recorded</p>`}
+                            `)}
+                        ${recentActivities.length === 0 && html`<p class="text-center text-slate-300 py-4 text-sm font-medium italic">No recent activity found</p>`}
                     </div>
                 </div>
 

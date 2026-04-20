@@ -820,12 +820,30 @@ const App = () => {
         return () => {};
     }, []);
 
-    // Auto-sync on app load if Google Sheet configured
-    // NOTE: Disabled - imported data stays local until Force Push is used
     useEffect(() => {
-        console.log('🔄 Auto-load from Google disabled - data stays local');
-        // User must use Force Push to sync local data to Google
-        // Or use manual "Sync with Google" button to pull from Google
+        if (!data.settings.googleScriptUrl) return;
+        
+        const loadCalendar = async () => {
+            try {
+                console.log('📅 Background loading calendar from Google...');
+                googleSheetSync.setSettings(data.settings);
+                const result = await googleSheetSync.fetchAll();
+                if (result.success && result.calendar) {
+                    setData(prev => Storage.replaceWithGoogleData(prev, {
+                        calendar: result.calendar
+                    }));
+                    console.log('📅 Calendar loaded from Google:', result.calendar.length, 'events');
+                }
+            } catch (error) {
+                console.warn('Failed to background load calendar:', error);
+            }
+        };
+        
+        loadCalendar();
+    }, [data.settings.googleScriptUrl]);
+
+    useEffect(() => {
+        console.log('🔄 Auto-load from Google disabled for core data - data stays local');
     }, []);
 
     useEffect(() => {
