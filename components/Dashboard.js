@@ -392,25 +392,36 @@ export const Dashboard = ({ data, setData, googleSyncStatus, isAdmin, teacherSes
                     <div class="space-y-1">
                         ${(recentActivities || []).map((activity, idx) => html`
                                 <div class=${`flex items-center gap-3 p-3 rounded-xl border-b border-slate-50 last:border-0 ${idx % 2 === 0 ? 'bg-slate-50/50' : ''}`}>
-                                    <div class=${`w-8 h-8 rounded-lg flex items-center justify-center text-xs ${
-                                        activity.action === 'ADD' ? 'bg-green-100 text-green-600' : 
-                                        activity.action === 'DELETE' ? 'bg-red-100 text-red-600' : 
-                                        'bg-indigo-100 text-indigo-600'
+                                    <div class=${`w-10 h-10 rounded-xl flex items-center justify-center text-lg shadow-sm border ${
+                                        activity.module === 'Payments' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
+                                        activity.module === 'Calendar' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' : 
+                                        activity.module === 'Students' ? 'bg-blue-50 text-blue-600 border-blue-100' : 
+                                        'bg-slate-50 text-slate-600 border-slate-100'
                                     }`}>
                                         ${activity.module === 'Calendar' ? '📅' : 
-                                          activity.module === 'Payments' ? '💰' : 
-                                          activity.module === 'Students' ? '👤' : '📝'}
+                                          activity.module === 'Payments' ? '💳' : 
+                                          activity.module === 'Students' ? '🎓' : '📝'}
                                     </div>
                                     <div class="flex-1 min-w-0">
-                                        <p class="font-bold text-[11px] md:text-xs text-slate-700 truncate">
-                                            ${activity.module === 'Payments' ? (activity.recordName || '').replace('Payment: ', '') : (activity.recordName || activity.details || 'System Action')}
+                                        <p class="font-bold text-[11px] md:text-xs text-slate-800 truncate">
+                                            ${activity.recordName || (activity.details ? activity.details.split(':').pop().trim() : 'Record')}
                                         </p>
                                         <p class="text-[9px] text-slate-400 capitalize">
-                                            ${activity.userName} • ${activity.action.toLowerCase()}ed • ${new Date(activity.timestamp).toLocaleDateString()}
+                                            ${activity.userName} • ${activity.action === 'ADD' ? 'added' : activity.action === 'UPDATE' ? 'updated' : activity.action.toLowerCase()} • ${new Date(activity.timestamp).toLocaleDateString()}
                                         </p>
                                     </div>
                                     <div class="text-right">
-                                        <span class="text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                                        ${activity.module === 'Payments' && html`
+                                            <div class="mb-1">
+                                                <span class="text-green-600 font-black text-xs md:text-sm block leading-none">
+                                                    +${settings.currency} ${(payments.find(p => String(p.id) === String(activity.recordId))?.amount || 0).toLocaleString()}
+                                                </span>
+                                                <span class="text-[8px] text-slate-300 font-mono uppercase tracking-tighter">
+                                                    ${payments.find(p => String(p.id) === String(activity.recordId))?.receiptNo || 'N/A'}
+                                                </span>
+                                            </div>
+                                        `}
+                                        <span class="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
                                             ${activity.module}
                                         </span>
                                     </div>

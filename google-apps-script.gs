@@ -406,20 +406,31 @@ function addRecord(sheetName, record, headers, userId = null, userName = null, u
     
     // ONLY log if it's a teacher or admin action
     if (userId && userRole && (userRole === 'teacher' || userRole === 'admin')) {
-      let recordName = record.title || record.name || record.id || '';
+      let recordName = record.title || record.name || record.studentName || record.studentAdmissionNo || '';
       
-      // Special handling for payments to include student name in activity log
-      if (sheetName === SHEET_NAMES.PAYMENTS && record.studentId) {
-        try {
-          const studentRecords = getAllRecords(SHEET_NAMES.STUDENTS, STUDENT_HEADERS, true);
-          const student = studentRecords.find(s => String(s.id) === String(record.studentId));
-          if (student) {
-            recordName = `Payment: ${student.name}`;
+      // If no name (e.g. for payments/assessments), try looking up the student in the Students sheet
+      if (!recordName && (sheetName === SHEET_NAMES.PAYMENTS || sheetName === SHEET_NAMES.ASSESSMENTS)) {
+        const studentId = record.studentId || record.studentAdmissionNo;
+        if (studentId) {
+          const studentSheet = ss.getSheetByName(SHEET_NAMES.STUDENTS);
+          if (studentSheet) {
+            const studentData = studentSheet.getDataRange().getValues();
+            const idIdx = STUDENT_HEADERS.indexOf('id');
+            const admIdx = STUDENT_HEADERS.indexOf('admissionNo');
+            const nameIdx = STUDENT_HEADERS.indexOf('name');
+            
+            for (let i = 1; i < studentData.length; i++) {
+              if (String(studentData[i][idIdx]) === String(studentId) || 
+                  String(studentData[i][admIdx]) === String(studentId)) {
+                recordName = studentData[i][nameIdx];
+                break;
+              }
+            }
           }
-        } catch (e) {
-          console.log('[addRecord] Failed to resolve student name for log');
         }
       }
+      
+      if (!recordName) recordName = record.id || 'Unknown';
 
       logUserActivity({
         userId,

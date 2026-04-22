@@ -871,6 +871,16 @@ export const Students = ({ data, setData, onSelectStudent, isAdmin, teacherSessi
                                 <td class="px-4 py-2 text-slate-500 text-xs font-mono">${student.admissionDate || '-'}</td>
                                 <td class="px-4 py-2 text-slate-500 text-xs font-mono">${student.upiNo || '-'}</td>
                                 <td class="px-4 py-2 text-slate-500 text-xs font-mono">${student.assessmentNo || '-'}</td>
+                                <td class="px-4 py-2">
+                                    <span class=${`px-2 py-1 rounded-full text-[9px] font-black uppercase ${
+                                        student.religion === 'Christian' ? 'bg-blue-100 text-blue-700' :
+                                        student.religion === 'Islam' ? 'bg-green-100 text-green-700' :
+                                        student.religion === 'Hindu' ? 'bg-orange-100 text-orange-700' :
+                                        'bg-slate-100 text-slate-400'
+                                    }`}>
+                                        ${student.religion || 'NONE'}
+                                    </span>
+                                </td>
                                 <td class="px-4 py-2 text-slate-700 text-xs font-bold">${student.parentContact || '-'}</td>
                                 <td class="px-4 py-2">
                                     <div class="flex flex-col gap-1">
